@@ -12,12 +12,19 @@ LOG_N = 9
 COLUMN = 23
 OUTPUT_FOLDER = "cld_output"
 
+CNO_STRING = """
+abundances solar
+element scale factor helium 2
+element scale factor carbon 0.5
+element scale factor nitrogen 7
+"""
+
 
 def run_cloudy(fname, cloudy_path="/Users/matthewsj/software/c17.01/source/"):
 	isys = os.system("{}/cloudy.exe < {}.in > {}.out".format(cloudy_path, fname, fname))
 	return (isys)
 
-def get_param_string(root, log_xi, log_U, BB_temp = 580225.906078):
+def get_param_string(root, log_xi, log_U, BB_temp = 580225.906078, abundance="solar"):
 	'''
 	Create a string to write to a cloudy input file. 
 
@@ -38,6 +45,11 @@ def get_param_string(root, log_xi, log_U, BB_temp = 580225.906078):
 		my_string str
 		string containing text to use for input file
 	'''
+	if abundance == "solar":
+		abundance_string = "abundances solar"
+	elif abundance == "cno":
+		abundance_string = CNO_STRING
+
 	my_string = '''title BB model, log density {:.1f}, log xi {:.1f}
 # =========
 # commands controlling continuum =========
@@ -47,6 +59,7 @@ ionization parameter {:.1f}
 # commands for density & abundances
 # =========
 hden {:.1f}
+{}
 # =========
 # commands controlling geometry  
 # =========
@@ -75,10 +88,10 @@ save lines, array "{}.lines" last
 save continuum "{}.cont" 
 #
 # ========================================
-'''.format(LOG_N, log_xi, BB_temp, log_U, LOG_N, root, root)
+'''.format(LOG_N, log_xi, BB_temp, log_U, LOG_N, abundance_string, root, root)
 	return my_string
 
-def initialise_cloudy_sim(root, log_xi, log_U, BB_temp = 580225.906078):
+def initialise_cloudy_sim(root, log_xi, log_U, BB_temp = 580225.906078, abundance="solar"):
 	'''
 	Initialise a cloudy simulation 
 
@@ -101,7 +114,7 @@ def initialise_cloudy_sim(root, log_xi, log_U, BB_temp = 580225.906078):
 	'''
 
 	# get the string to write to file
-	params = get_param_string(root, log_xi, log_U, BB_temp = BB_temp)
+	params = get_param_string(root, log_xi, log_U, BB_temp = BB_temp, abundance=abundance)
 	
 	# chuck the text in an input file 
 	fname = "{}.in".format(root)
@@ -109,7 +122,7 @@ def initialise_cloudy_sim(root, log_xi, log_U, BB_temp = 580225.906078):
 	f.write(params)
 	f.close()
 
-def run_logxi_grid(logxis =  np.arange(-3,2,0.5), BB_TEMP = 50.0):
+def run_logxi_grid(logxis =  np.arange(-3,2,0.5), BB_TEMP = 50.0, abundance="solar"):
 	'''
 	Run a grid of blackbody cloudy simulations 
 
@@ -133,14 +146,18 @@ def run_logxi_grid(logxis =  np.arange(-3,2,0.5), BB_TEMP = 50.0):
 		# root filename to use for input and output files
 		root = "BB_{:.1f}_1858_n{:.1f}_xi{:.1f}".format(BB_TEMP, LOG_N, logxi)
 
+		if abundance == "cno":
+			root += abundance
+
 		print (BB_TEMP * EV2ERGS / BOLTZMANN)
 
 		# Initialise simulation by creating input file 
-		initialise_cloudy_sim(root, logxi, logU, BB_temp = BB_TEMP * EV2ERGS / BOLTZMANN)
+		initialise_cloudy_sim(root, logxi, logU, BB_temp = BB_TEMP * EV2ERGS / BOLTZMANN, abundance=abundance)
 
 		# run the sim! 
 		run_cloudy(root)
 
 if __name__ == "__main__":
-	run_logxi_grid(logxis =  np.arange(-3,2,0.5), BB_TEMP = 50.0)
+	#run_logxi_grid(logxis =  np.arange(-3,2,0.5), BB_TEMP = 50.0, abundance="solar")
+	run_logxi_grid(logxis =  np.arange(-3,2,0.5), BB_TEMP = 50.0, abundance="cno")
 
