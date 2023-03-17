@@ -38,6 +38,15 @@ def get_q_over_l(freq, spectrum):
     
     return (Q/L)
 
+def get_conversion_factor_brems(temp_eV = 50.0):
+    freq = np.logspace(13,20,10000)
+    T = temp_eV * u.eV / const.k_B
+    spec = freq ** (-0.2) * np.exp(-H * freq / const.k_B.cgs.value / T.cgs.value)
+
+    Q_over_L = get_q_over_l(freq, spec)
+    factor = 1.0 / 4.0 / np.pi / C * Q_over_L
+    return factor
+
 def get_conversion_factor_blackbody(temp_eV = 50.0):
     '''
     Calculate the ratio of the two different ionization parameters (U/xi) 
