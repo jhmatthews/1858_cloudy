@@ -1,22 +1,28 @@
 import os
-import sys
 import numpy as np
-import time
 import convert_ip
+import argparse
 from tqdm import tqdm
 
 # some constants
-# CAUTION: DENSITY IS HARDWIRED AT THE MOMENT
+# CAUTION: COLUMN DENSITY IS HARDWIRED AT THE MOMENT
 BOLTZMANN = 1.38062e-16
 EV2ERGS = 1.602192e-12
 COLUMN = 23
 OUTPUT_FOLDER = "cld_output"
 
+# Different strings to control abundances
 CNO_STRING = """
 abundances H II region
 element scale factor helium 2
 element scale factor carbon 0.5
 element scale factor nitrogen 7"""
+
+CNO_STRING_EQ = """
+abundances H II region
+element scale factor carbon 0.018
+element scale factor nitrogen 7.5
+element scale factor oxygen 0.037"""
 
 
 def run_cloudy(fname, cloudy_path="/Users/matthewsj/software/c17.01/source/", folder="cld_data/"):
@@ -25,8 +31,8 @@ def run_cloudy(fname, cloudy_path="/Users/matthewsj/software/c17.01/source/", fo
     return (isys)
 
 
-def get_param_string(root, log_xi, log_U, sed="bb", BB_temp=580225.906078, temp=None,
-                     abundance="solar", LOG_N=9):
+def get_param_string(root, log_xi, log_U, sed="bb", temp=None,
+                     abundance="solar", LOG_N=9, folder="cld_data"):
     '''
     Create a string to write to a cloudy input file. 
 
@@ -40,8 +46,8 @@ def get_param_string(root, log_xi, log_U, sed="bb", BB_temp=580225.906078, temp=
             log_U 	float 
                             log of U ionization parameter
 
-            BB_temp float 
-                            Blackbody temperature in K (linear)
+            temp float 
+                            temperature in K (linear)
 
     Returns:
             my_string str
@@ -51,6 +57,8 @@ def get_param_string(root, log_xi, log_U, sed="bb", BB_temp=580225.906078, temp=
         abundance_string = "abundances solar"
     elif abundance == "cno":
         abundance_string = CNO_STRING
+    elif abundance == "cno_eq":
+        abundance_string = CNO_STRING_EQ
 
     if sed == "bb":
         sed_string = "Blackbody {}".format(temp)
@@ -90,39 +98,31 @@ normalize to "H  1" 1215.67A 100
 # print line faint 1  # get rid of lots of faint lines c
 # print off
 print lines column
-save lines, array "{}.lines" last
-save continuum "{}.cont" 
+save lines, array "{}/{}.lines" last
+save continuum "{}/{}.cont" 
 #
 # ========================================
-'''.format(sed, LOG_N, log_xi, sed_string, log_U, LOG_N, abundance_string, root, root)
+'''.format(sed, LOG_N, log_xi, sed_string, log_U, LOG_N, abundance_string, folder, root, folder, root)
     return my_string
 
 
-def initialise_cloudy_sim(root, log_xi, log_U, LOG_N=9, sed = "bb", temp=580225.906078, abundance="solar", folder="cld_data/"):
-    '''
-    Initialise a cloudy simulation 
+def initialise_cloudy_sim(root, log_xi, log_U, LOG_N=9, sed="bb", temp=580225.906078, abundance="solar", folder="cld_data/"):
+    """Initialise a cloudy simulation 
 
-    Parameters:
-            root 	str
-                            root filename to use for naming
-
-            log_xi  float 
-                            log of xi ionization parameter (only used for title)
-
-            log_U 	float 
-                            log of U ionization parameter
-
-            temp float 
-                            Ttemperature in K (linear)
-
-            folder  str
-                            folder to store data (default cld_data/)
-
-    '''
+    Args:
+        root (_type_): root filename to use for naming
+        log_xi (_type_): log of xi ionization parameter (only used for title)
+        log_U (_type_): log of U ionization parameter
+        LOG_N (int, optional): log electron density. Defaults to 9.
+        sed (str, optional): SED type to use: must be bb or brems.. Defaults to "bb".
+        temp (float, optional): Temperature in K (linear). Defaults to 580225.906078.
+        abundance (str, optional): abundances to use. . Defaults to "solar".
+        folder (str, optional): folder to store data. Defaults to "cld_data/".
+    """
 
     # get the string to write to file
     params = get_param_string(
-        root, log_xi, log_U, LOG_N=LOG_N, temp=temp, sed=sed, abundance=abundance)
+        root, log_xi, log_U, LOG_N=LOG_N, temp=temp, sed=sed, abundance=abundance, folder=folder)
 
     # chuck the text in an input file
     fname = "{}/{}.in".format(folder, root)
@@ -132,17 +132,16 @@ def initialise_cloudy_sim(root, log_xi, log_U, LOG_N=9, sed = "bb", temp=580225.
 
 
 def run_logxi_grid(logxis=np.arange(-3, 2, 0.5), sed="bb", TEMP=50.0, LOG_N=9, abundance="solar", folder="cld_data/"):
-    '''
-    Run a grid of blackbody cloudy simulations 
+    """Run a grid of blackbody cloudy simulations 
 
-    Parameters:	
-            logxis	array-like
-                            array of floats containing log10 of ionization parameter xi
-
-            BB_temp float 
-                            Blackbody temperature in ELECTRON VOLTS (linear)
-    '''
-
+    Args:
+        logxis (array-like, optional): array of floats containing log10 of ionization parameter xi. Defaults to np.arange(-3, 2, 0.5).
+        sed (str, optional): SED type to use: must be bb or brems. Defaults to "bb".
+        TEMP (float, optional): Blackbody temperature in ELECTRON VOLTS (linear). Defaults to 50.0.
+        LOG_N (int, optional): log of density. Defaults to 9.
+        abundance (str, optional): abundances to use. Defaults to "solar".
+        folder (str, optional): folder to save the data. Defaults to "cld_data/".
+    """
     for i, logxi in enumerate(tqdm(logxis)):
         #print (i, logxi)
 
@@ -151,15 +150,16 @@ def run_logxi_grid(logxis=np.arange(-3, 2, 0.5), sed="bb", TEMP=50.0, LOG_N=9, a
         if sed == "bb":
             factor = convert_ip.get_conversion_factor_blackbody(temp_eV=TEMP)
             root = "BB_{:.1f}_1858_n{:.1f}_xi{:.3f}".format(TEMP, LOG_N, logxi)
-             # root filename to use for input and output files
+            # root filename to use for input and output files
         elif sed == "brems":
-            factor = convert_ip.get_conversion_factor_brems(temp_eV=TEMP * 1000.0)
-            root = "brems_{:.1f}_1858_n{:.1f}_xi{:.3f}".format(TEMP, LOG_N, logxi)
+            factor = convert_ip.get_conversion_factor_brems(
+                temp_eV=TEMP * 1000.0)
+            root = "brems_{:.1f}_1858_n{:.1f}_xi{:.3f}".format(
+                TEMP, LOG_N, logxi)
         U = xi * factor
         logU = np.log10(U)
 
-
-        if abundance == "cno":
+        if "cno" in abundance:
             root += abundance
 
         #print (BB_TEMP * EV2ERGS / BOLTZMANN)
@@ -168,22 +168,45 @@ def run_logxi_grid(logxis=np.arange(-3, 2, 0.5), sed="bb", TEMP=50.0, LOG_N=9, a
         elif sed == "brems":
             temp = np.log10(TEMP * 1000.0 * EV2ERGS / BOLTZMANN)
         # Initialise simulation by creating input file
-        initialise_cloudy_sim(root, logxi, logU, LOG_N=LOG_N, temp=temp, 
+        initialise_cloudy_sim(root, logxi, logU, LOG_N=LOG_N, temp=temp,
                               abundance=abundance, folder=folder, sed=sed)
 
         # run the sim!
         run_cloudy(root, folder=folder)
 
 
-if __name__ == "__main__":
-    TEMP = float(sys.argv[1])
-    abundance = str(sys.argv[2])
-    sed = str(sys.argv[3])
+def parse_args():
+    """parse command line arguments
 
+    Returns:
+        args: arguments to use in program
+    """
+    parser = argparse.ArgumentParser(
+        prog='1858_run_cloudy',
+        description='Run a cloudy grid for the 1858 abundances project')
+
+    parser.add_argument('-t', '--temp', nargs=1, type=float,
+                        help="Temperature in eV, or keV if brems",
+                        default=50.0)
+
+    parser.add_argument('-sed', '--sed', nargs=1, type=str,
+                        help="SED (must be bb or brems)",
+                        default="bb", choices={"bb", "brems"})
+
+    parser.add_argument('-a', '--abun', nargs=1, type=str,
+                        help="which abundances to use. cno_eq means CNO equilibrium.",
+                        default="solar", choices={"solar", "cno", "cno_eq"})
+
+    args = parser.parse_args()
+    return args
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    TEMP = args.temp
+    abundance = args.abun
+    sed = args.sed
+
+    # density hardwired to 1e9
     run_logxi_grid(logxis=np.arange(-3, 2, 0.125), TEMP=TEMP,
                    LOG_N=9, abundance=abundance, sed=sed)
-
-    #run_logxi_grid(logxis =  np.arange(-3,2,0.5), BB_TEMP = 50.0, abundance="solar")
-    #run_logxi_grid(logxis =  np.arange(-3,2,0.25), BB_TEMP = 10.0, abundance="solar")
-    #run_logxi_grid(logxis =  np.arange(-3,2,0.25), BB_TEMP = 50.0, abundance="cno")
-    #run_logxi_grid(logxis =  np.arange(-3,2,0.25), BB_TEMP = 10.0, abundance="cno")
